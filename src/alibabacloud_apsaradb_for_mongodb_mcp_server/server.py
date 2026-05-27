@@ -1,5 +1,5 @@
 from typing import Dict, Any, Literal, Optional, List
-from utils import mcp, logger, get_mongodb_connection_configuration, get_dds_client, get_vpc_client
+from utils import mcp, logger, get_mongodb_connection_configuration, get_dds_client, get_vpc_client, validate_connection_string, mask_connection_string
 from pymongo import MongoClient, errors
 from alibabacloud_dds20151201 import models as dds_20151201_models
 from alibabacloud_vpc20160428 import models as vpc_20160428_models
@@ -22,8 +22,13 @@ def list_databases(connection_string: str = None) -> str:
 
     if connection_string is None:
         connection_string = get_mongodb_connection_configuration()
+    else:
+        try:
+            validate_connection_string(connection_string)
+        except ValueError as e:
+            return f"Connection rejected: {str(e)}"
     try:
-        client = MongoClient(connection_string)
+        client = MongoClient(connection_string, serverSelectionTimeoutMS=5000)
         result = client.admin.command("listDatabases")
         return str(result)
     except Exception as e:
@@ -44,11 +49,16 @@ def get_top_reusable_space_collections(connection_string, top_n=10):
     """
     if connection_string is None:
         connection_string = get_mongodb_connection_configuration()
+    else:
+        try:
+            validate_connection_string(connection_string)
+        except ValueError as e:
+            return f"Connection rejected: {str(e)}"
     try:
-        client = MongoClient(connection_string)
+        client = MongoClient(connection_string, serverSelectionTimeoutMS=5000)
     except errors.ConnectionFailure as e:
-        logger.error(f"Failed to connect to MongoDB: {e}, connection_string: {connection_string}")
-        return f"Failed to connect to MongoDB: {e}, connection_string: {connection_string}"
+        logger.error(f"Failed to connect to MongoDB: {e}, connection_string: {mask_connection_string(connection_string)}")
+        return f"Failed to connect to MongoDB: {e}"
 
     results = []
     for db_name in client.list_database_names():
